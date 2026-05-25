@@ -360,7 +360,18 @@ class Dropout(Layer):
         #  Notice that contrary to previous layers, this layer behaves
         #  differently a according to the current training_mode (train/test).
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        if self.training_mode and self.p > 0:
+            # 1. Create a binary mask where a pixel is 0 with probability p and 1 with probability (1 - p).
+            # torch.rand_like generates values between 0 and 1. If a value is >= p, it returns 1.
+            self.mask = (torch.rand_like(x) >= self.p).float()
+            
+            # 2. Scale the remaining activations by 1 / (1 - p) to preserve expected values (Inverted Dropout)
+            scale = 1.0 / (1.0 - self.p)
+            out = x * self.mask * scale
+        else:
+            # During test mode, dropout is a no-op (pass input through unchanged)
+            out = x
+            self.mask = None
         # ========================
 
         return out
@@ -368,7 +379,14 @@ class Dropout(Layer):
     def backward(self, dout):
         # TODO: Implement the dropout backward pass.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        if self.training_mode and self.p > 0 and self.mask is not None:
+            # Gradients only flow backward through the neurons that weren't dropped out.
+            # We must also apply the exact same scaling factor used in the forward pass!
+            scale = 1.0 / (1.0 - self.p)
+            dx = dout * self.mask * scale
+        else:
+            # During test mode or if p=0, gradients pass through unchanged
+            dx = dout
         # ========================
 
         return dx
@@ -483,16 +501,16 @@ class MLP(Layer):
         current_in = in_features
 
         for h in hidden_features:
-            layers.append(Linear(current_in, h))
-            
+            layers.append(Linear(current_in, h, **kw))            
             if activation.lower() == "relu":
                 layers.append(ReLU())
             elif activation.lower() == "sigmoid":
                 layers.append(Sigmoid())
-            
+            if dropout > 0:
+                layers.append(Dropout(p=dropout))
             current_in = h
 
-        layers.append(Linear(current_in, num_classes))
+        layers.append(Linear(current_in, num_classes, **kw))
         # ========================
 
         self.sequence = Sequential(*layers)
