@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from torch import Tensor, nn
 from typing import Optional
 from sklearn.metrics import roc_curve
+import numpy as np
 
 
 class Classifier(nn.Module, ABC):
@@ -22,7 +23,7 @@ class Classifier(nn.Module, ABC):
 
         # TODO: Add any additional initializations here, if you need them.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.softmax = nn.Softmax(dim=1)
         # ========================
 
     def forward(self, x: Tensor) -> Tensor:
@@ -34,7 +35,7 @@ class Classifier(nn.Module, ABC):
 
         # TODO: Implement the forward pass, returning raw scores from the wrapped model.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        z = self.model(x)
         # ========================
         assert z.shape[0] == x.shape[0] and z.ndim == 2, "raw scores should be (N, C)"
         return z
@@ -47,7 +48,7 @@ class Classifier(nn.Module, ABC):
         """
         # TODO: Calcualtes class scores for each sample.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        z = self.forward(x)
         # ========================
         return self.predict_proba_scores(z)
 
@@ -59,7 +60,7 @@ class Classifier(nn.Module, ABC):
         """
         # TODO: Calculate class probabilities for the input.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        return self.softmax(z)
         # ========================
 
     def classify(self, x: Tensor) -> Tensor:
@@ -96,7 +97,7 @@ class ArgMaxClassifier(Classifier):
         #  Classify each sample to one of C classes based on the highest score.
         #  Output should be a (N,) integer tensor.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        return torch.argmax(y_proba, dim=1).int()
         # ========================
 
 
@@ -107,7 +108,7 @@ class BinaryClassifier(Classifier):
     """
 
     def __init__(
-        self, model: nn.Module, positive_class: int = 1, threshold: float = 0.5
+            self, model: nn.Module, positive_class: int = 1, threshold: float = 0.5
     ):
         """
         :param model: The wrapped model. Should implement a `forward()` function
@@ -128,17 +129,18 @@ class BinaryClassifier(Classifier):
         #  greater or equal to the threshold.
         #  Output should be a (N,) integer tensor.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        positive_probs = y_proba[:, self.positive_class]
+        return (positive_probs >= self.threshold).int()
         # ========================
 
 
 def plot_decision_boundary_2d(
-    classifier: Classifier,
-    x: Tensor,
-    y: Tensor,
-    dx: float = 0.1,
-    ax: Optional[plt.Axes] = None,
-    cmap=plt.cm.get_cmap("coolwarm"),
+        classifier: Classifier,
+        x: Tensor,
+        y: Tensor,
+        dx: float = 0.1,
+        ax: Optional[plt.Axes] = None,
+        cmap=plt.cm.get_cmap("coolwarm"),
 ):
     """
     Plots a decision boundary of a classifier based on two input features.
@@ -177,7 +179,26 @@ def plot_decision_boundary_2d(
     #  plot a contour map.
     x1_grid, x2_grid, y_hat = None, None, None
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+
+    # Find the boundaries of the data with a small margin
+    x1_min, x1_max = x[:, 0].min() - 0.5, x[:, 0].max() + 0.5
+    x2_min, x2_max = x[:, 1].min() - 0.5, x[:, 1].max() + 0.5
+
+    # Create the grid
+    x1_grid, x2_grid = torch.meshgrid(
+        torch.arange(x1_min, x1_max, dx),
+        torch.arange(x2_min, x2_max, dx),
+        indexing='xy'  # Prevents deprecation warnings in newer PyTorch versions
+    )
+
+    # Flatten grids to evaluate them via the classifier
+    grid_points = torch.stack([x1_grid.flatten(), x2_grid.flatten()], dim=1)
+
+    with torch.no_grad():
+        y_hat_flat = classifier.classify(grid_points)
+
+    # Reshape predictions back to grid shape
+    y_hat = y_hat_flat.reshape(x1_grid.shape)
     # ========================
 
     # Plot the decision boundary as a filled contour
@@ -190,7 +211,7 @@ def plot_decision_boundary_2d(
 
 
 def select_roc_thresh(
-    classifier: Classifier, x: Tensor, y: Tensor, plot: bool = False,
+        classifier: Classifier, x: Tensor, y: Tensor, plot: bool = False,
 ):
     """
     Calculates (and optionally plot) a classification threshold of a binary
@@ -210,9 +231,22 @@ def select_roc_thresh(
     #  Calculate the index of the optimal threshold as optimal_thresh_idx.
     #  Calculate the optimal threshold as optimal_thresh.
     fpr, tpr, thresh = None, None, None
-    optimal_theresh_idx, optimal_thresh = None, None
+    optimal_thresh_idx, optimal_thresh = None, None
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+
+    # Get probabilities for the positive class
+    with torch.no_grad():
+        y_proba = classifier.predict_proba(x)[:, classifier.positive_class].numpy()
+
+    y_true = y.numpy()
+
+    # Calculate ROC curve
+    fpr, tpr, thresh = roc_curve(y_true, y_proba)
+
+    # Optimal threshold balances TPR and FPR (Youden's J statistic = TPR - FPR)
+    optimal_thresh_idx = np.argmax(tpr - fpr)
+    optimal_thresh = float(thresh[optimal_thresh_idx])
+
     # ========================
 
     if plot:

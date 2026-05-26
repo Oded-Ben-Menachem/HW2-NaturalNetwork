@@ -157,7 +157,7 @@ class Sigmoid(Layer):
         # TODO: Implement gradient w.r.t. the input x
         # ====== YOUR CODE: ======
         out = self.grad_cache["out"]
-        dx = dout*out*(1-out)
+        dx = dout * out * (1.0 - out)
         # ========================
 
         return dx

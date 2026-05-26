@@ -14,7 +14,6 @@ ACTIVATIONS = {
     None: nn.Identity,
 }
 
-
 # Default keyword arguments to pass to activation class constructors, e.g.
 # activation_cls(**ACTIVATION_DEFAULT_KWARGS[name])
 ACTIVATION_DEFAULT_KWARGS = defaultdict(
@@ -33,7 +32,7 @@ class MLP(nn.Module):
     """
 
     def __init__(
-        self, in_dim: int, dims: Sequence[int], nonlins: Sequence[Union[str, nn.Module]]
+            self, in_dim: int, dims: Sequence[int], nonlins: Sequence[Union[str, nn.Module]]
     ):
         """
         :param in_dim: Input dimension.
@@ -44,6 +43,7 @@ class MLP(nn.Module):
             dict, or instances of nn.Module (e.g. an instance of nn.ReLU()).
             Length should match 'dims'.
         """
+        super().__init__()  # Don't forget to call the base class init!
         assert len(nonlins) == len(dims)
         self.in_dim = in_dim
         self.out_dim = dims[-1]
@@ -55,7 +55,27 @@ class MLP(nn.Module):
         #  - Either instantiate the activations based on their name or use the provided
         #    instances.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        layers = []
+        current_in_dim = in_dim
+
+        for dim, nonlin in zip(dims, nonlins):
+            # 1. Add the linear layer
+            layers.append(nn.Linear(current_in_dim, dim))
+
+            # 2. Add the activation
+            if isinstance(nonlin, str):
+                activation_name = nonlin.lower()
+                activation_cls = ACTIVATIONS[activation_name]
+                kwargs = ACTIVATION_DEFAULT_KWARGS[activation_name]
+                layers.append(activation_cls(**kwargs))
+            elif isinstance(nonlin, nn.Module):
+                layers.append(nonlin)
+
+            # Update the input dimension for the next layer
+            current_in_dim = dim
+
+        # Wrap everything in nn.Sequential and assign to a module attribute
+        self.model = nn.Sequential(*layers)
         # ========================
 
     def forward(self, x: Tensor) -> Tensor:
@@ -66,5 +86,8 @@ class MLP(nn.Module):
         # TODO: Implement the model's forward pass. Make sure the input and output
         #  shapes are as expected.
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        # Reshape just in case x is passed as a multi-dimensional tensor (e.g. images)
+        x = x.view(x.size(0), -1)
+        out = self.model(x)
+        return out
         # ========================

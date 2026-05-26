@@ -11,7 +11,7 @@ math (delimited with $$).
 part1_q1 = r"""
 
 1.
-A. If we have a batch of 64, the input is 1024 and the output is 512, then $X$ will be of size $64 \times 1024$, $W$ will be of size $512 \times 1024$, and $Y$ will be of size $64 \times 512$. The dimension of the tensor is the dimension of $X$ times the dimension of $Y$, meaning a 4D tensor of dimension $64 \times 1024 \times 64 \times 512$.
+A. If we have a batch of 64, the input is 1024 and the output is 512, then $X$ will be of size $64 \times 1024$, $W$ will be of size $512 \times 1024$, and $Y$ will be of size $64 \times 512$. The dimension of the tensor is the dimension of Y times the dimension of X, meaning a 4D tensor of dimension 64 x 512 x 64 x 1024.
 
 B. Yes. Most elements will be 0 because the batches are not related, and derivatives between different batches will be 0.
 
@@ -131,13 +131,12 @@ Backward Mode: Yes, we can still choose key points (checkpoints) in the graph an
 
 
 def part3_arch_hp():
-    n_layers = 0  # number of layers (not including output)
-    hidden_dims = 0  # number of output dimensions for each hidden layer
-    activation = "none"  # activation function to apply after each hidden layer
-    out_activation = "none"  # activation function to apply at the output layer
-    # TODO: Tweak the MLP architecture hyperparameters.
+    n_layers = 2  # number of hidden layers
+    hidden_dims = 64  # number of output dimensions for each hidden layer
+    activation = "relu"  # activation function to apply after each hidden layer
+    out_activation = "none"  # activation function to apply at the output layer (CrossEntropy needs raw scores)
+
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
     # ========================
     return dict(
         n_layers=n_layers,
@@ -151,32 +150,52 @@ def part3_optim_hp():
     import torch.nn
     import torch.nn.functional
 
-    loss_fn = None  # One of the torch.nn losses
-    lr, weight_decay, momentum = 0, 0, 0  # Arguments for SGD optimizer
-    # TODO:
-    #  - Tweak the Optimizer hyperparameters.
-    #  - Choose the appropriate loss function for your architecture.
-    #    What you returns needs to be a callable, so either an instance of one of the
-    #    Loss classes in torch.nn or one of the loss functions from torch.nn.functional.
+    loss_fn = torch.nn.CrossEntropyLoss()  # Standard loss for classification
+    lr, weight_decay, momentum = 0.01, 0.001, 0.9  # Arguments for SGD optimizer
+
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
     # ========================
     return dict(lr=lr, weight_decay=weight_decay, momentum=momentum, loss_fn=loss_fn)
 
 
 part3_q1 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+Based on the plots (loss/accuracy curves and decision boundary), the qualitative assessment of the errors is as follows:
+
+1. **Optimization Error is LOW:** The training loss decreases smoothly and converges to a low value, while training accuracy reaches a high level (e.g., >85%). This indicates that our optimization algorithm (Adam/SGD) successfully minimized the loss function and found a good local minimum without getting stuck.
+
+2. **Generalization Error is LOW:** The gap between the training accuracy/loss and the validation accuracy/loss is relatively small. The validation metrics follow the training metrics closely, indicating that the model did not memorize the training data (no severe overfitting) and generalizes well to unseen data from the same mixture distribution.
+
+3. **Approximation Error is LOW:** The plotted decision boundary is highly non-linear and successfully captures the complex, overlapping "crescent" shapes of the moon dataset. This shows that the MLP architecture we chose (its depth, width, and ReLU activations) has sufficient capacity to approximate the underlying true function of the data.
+"""
 
 part3_q2 = r"""
-Fill me. You can use Markdown and LaTeX in this string.
+Based on the data generating process, we would expect an imbalance between the False Positive Rate (FPR) and False Negative Rate (FNR). 
+
+The validation set is drawn from a mixture of two `make_moons` distributions (rotated 10 degrees with 0.2 noise, and rotated 50 degrees with 0.25 noise). Because the second distribution has a very strong rotation and higher noise, one of the "moons" (either class 0 or class 1) is pushed deeper into the spatial territory of the other class. 
+Since the standard threshold is rigidly set at 0.5, the model's decision boundary will try to smoothly separate the classes. The class that is more "smeared" or spread out into the other's region due to the 50-degree rotation will suffer from more misclassifications. If Class 0 (negative) points are pushed into the Class 1 region, the **FPR will be higher**. Conversely, if Class 1 (positive) points are pushed into the Class 0 region, the **FNR will be higher**.
 """
 
 part3_q3 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+In real-world scenarios, the threshold is dictated by the specific cost matrix of False Positives (FP) vs. False Negatives (FN). We would **not** use the same "optimal" point (Youden's J statistic) from the generic ROC analysis.
+
+1. **Scenario 1 (Non-lethal, expensive further testing):** Here, the cost of a False Positive is very high (sending a healthy person to an expensive, high-risk test), while the cost of a False Negative is relatively low (the disease is non-lethal, will show symptoms later, and is treatable). 
+**Adjustment:** We would choose a **higher threshold**. On the ROC curve, we would move to the bottom-left. This drastically reduces the FPR (protecting healthy patients from dangerous tests) at the acceptable cost of a lower True Positive Rate (TPR).
+
+2. **Scenario 2 (Silent, lethal disease):** Here, the cost of a False Negative is astronomical (the patient dies), while the cost of a False Positive is acceptable compared to loss of life. We want to catch every single sick person.
+**Adjustment:** We would choose a **lower threshold**. On the ROC curve, we would move to the top-right. This maximizes TPR (Sensitivity) close to 1.0, ensuring almost no sick patients are missed, even though it results in a high FPR (many healthy people will undergo unnecessary tests).
+"""
 
 
 part3_q4 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+1. **Fixed Depth, Varying Width (Columns):** As the width (number of neurons per layer) increases, the model's capacity grows. A very narrow network (e.g., width=2) severely underfits, resulting in a nearly linear and inaccurate decision boundary. As width increases to 8 and 32, the model can capture more localized, complex features, resulting in a decision boundary that tightly fits the curved shape of the moons and higher accuracy.
+
+2. **Fixed Width, Varying Depth (Rows):** Increasing the depth (number of layers) allows the network to learn hierarchical and more abstract compositional representations. A shallow network (depth=1) acts like a basic combination of linear hyperplanes. As depth increases to 4, the decision boundary becomes highly non-linear, creating complex "folds" and islands that isolate data points much better.
+
+3. **Depth=1, Width=32 vs. Depth=4, Width=8:** Both networks have roughly a similar number of parameters. However, the deep/narrow network (depth=4, width=8) often creates highly non-linear and compositional boundaries, which is generally better for complex topological shapes like intertwined moons. The shallow/wide network (depth=1, width=32) acts more like a template matcher; it produces smoother boundaries but struggles more to capture highly abstract representations compared to the deep network.
+
+4. **Effect of Threshold Selection:** Yes, optimizing the threshold on the validation set generally **improves** the results on the test set. The default 0.5 threshold assumes the model is perfectly calibrated and the classes are perfectly balanced. However, due to noise and rotation, the model's probabilities are often slightly biased. Using ROC analysis on the validation set finds the true density separation point. Because the test set is related to the validation distribution, applying this calibrated threshold corrects the model's inherent bias and increases test accuracy.
+"""
+
 # ==============
 # Part 4 (CNN) answers
 
@@ -193,14 +212,27 @@ def part4_optim_hp():
     #    What you returns needs to be a callable, so either an instance of one of the
     #    Loss classes in torch.nn or one of the loss functions from torch.nn.functional.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+    loss_fn = torch.nn.CrossEntropyLoss()
+    lr, weight_decay, momentum = 0.1, 0.0001, 0.9
     # ========================
     return dict(lr=lr, weight_decay=weight_decay, momentum=momentum, loss_fn=loss_fn)
 
-
 part4_q1 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+1. **Number of Parameters:**
+   - **Regular Block:** Uses two $3\times3$ convolutions, each mapping 256 input channels to 256 output channels. 
+     Parameters = $2 \times (3 \times 3 \times 256 \times 256) = 2 \times 589,824 = \mathbf{1,179,648}$ (ignoring biases).
+   - **Bottleneck Block:** Uses three convolutions: 
+     a $1\times1$ projection (256 $\rightarrow$ 64), a $3\times3$ inner conv (64 $\rightarrow$ 64), and a $1\times1$ projection (64 $\rightarrow$ 256).
+     Parameters = $(1 \times 1 \times 256 \times 64) + (3 \times 3 \times 64 \times 64) + (1 \times 1 \times 64 \times 256) = 16,384 + 36,864 + 16,384 = \mathbf{69,632}$ (ignoring biases).
+     *The bottleneck block uses about 17x fewer parameters.*
 
+2. **Floating Point Operations (FLOPS):**
+   - The number of FLOPS is directly proportional to the number of parameters multiplied by the spatial dimensions of the feature map. Since the bottleneck block drastically reduces the number of parameters by operating its heavy $3\times3$ convolution on a much smaller channel depth (64 instead of 256), its computational cost (FLOPS) is significantly lower compared to the regular block.
+
+3. **Ability to combine the input:**
+   - **Spatially (within feature maps):** Both blocks combine spatial information using the $3\times3$ convolution. However, the regular block does this twice (larger effective receptive field), while the bottleneck block only has one $3\times3$ spatial convolution.
+   - **Across feature maps (cross-channel):** The bottleneck block excels here. The $1\times1$ convolutions are explicitly designed to act as fully connected layers applied to each pixel, forcing the network to combine and compress cross-channel features efficiently before and after the spatial operation. The regular block combines them naturally, but without the explicit dimension reduction/expansion phase.
+"""
 # ==============
 
 # ==============

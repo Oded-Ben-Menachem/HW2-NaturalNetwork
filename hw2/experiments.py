@@ -49,14 +49,13 @@ DEFAULT_EXPERIMENT_CONFIG = {
 }
 
 
-
 def mlp_experiment(
-    depth: int,
-    width: int,
-    dl_train: DataLoader,
-    dl_valid: DataLoader,
-    dl_test: DataLoader,
-    n_epochs: int,
+        depth: int,
+        width: int,
+        dl_train: DataLoader,
+        dl_valid: DataLoader,
+        dl_test: DataLoader,
+        n_epochs: int,
 ):
     # TODO:
     #  - Create a BinaryClassifier model.
@@ -70,7 +69,47 @@ def mlp_experiment(
     #  Note: use print_every=0, verbose=False, plot=False where relevant to prevent
     #  output from this function.
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+
+    # 1. Create the model
+    # The architecture asks for a specific depth and width.
+    # We use ReLU activations for hidden layers and no activation ('none') for the output layer
+    # since our BinaryClassifier will apply Softmax internally via predict_proba.
+    dims = [width] * depth + [2]  # 'depth' hidden layers of size 'width', then output of size 2
+    nonlins = ['relu'] * depth + ['none']
+
+    # Get the input dimension from the first batch of the training set
+    x0, _ = next(iter(dl_train))
+    in_dim = x0.shape[1]
+
+    mlp = MLP(in_dim=in_dim, dims=dims, nonlins=nonlins)
+    model = BinaryClassifier(model=mlp, threshold=0.5)
+
+    # 2. Train the model
+    loss_fn = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)  # Adam usually converges faster here
+    trainer = ClassifierTrainer(model, loss_fn, optimizer)
+
+    fit_result = trainer.fit(
+        dl_train,
+        dl_valid,
+        num_epochs=n_epochs,
+        print_every=0  # Silent training as requested
+    )
+
+    # Extract validation accuracy from the last epoch
+    valid_acc = fit_result.test_acc[-1]
+
+    # 3. Threshold selection
+    # We use the entire validation dataset to find the optimal threshold
+    x_valid, y_valid = dl_valid.dataset.tensors
+    thresh = select_roc_thresh(model, x_valid, y_valid, plot=False)
+
+    # Update the model with the optimal threshold
+    model.threshold = thresh
+
+    # 4. Evaluate on the test set
+    test_result = trainer.test_epoch(dl_test, verbose=False)
+    test_acc = test_result.accuracy
 
     # ========================
     return model, thresh, valid_acc, test_acc
@@ -135,15 +174,44 @@ def cnn_experiment(
     #   for you automatically.
     fit_res = None
     # ====== YOUR CODE: ======
-    raise NotImplementedError()
+
+    # Generate the channels list by repeating the filters_per_layer list L times
+    channels = filters_per_layer * layers_per_block
+
+    model = model_cls(
+        in_size=ds_train[0][0].shape,
+        out_classes=10,
+        channels=channels,
+        pool_every=pool_every,
+        hidden_dims=hidden_dims,
+        conv_params=conv_params,
+        pooling_params=pooling_params,
+        **kw
+    ).to(device)
+
+    loss_fn = torch.nn.CrossEntropyLoss()
+    # Adam usually converges better and faster for these deep CNNs
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=reg)
+
+    trainer = ClassifierTrainer(model, loss_fn, optimizer, device)
+
+    dl_train = DataLoader(ds_train, bs_train, shuffle=True)
+    dl_test = DataLoader(ds_test, bs_test, shuffle=False)
+
+    fit_res = trainer.fit(
+        dl_train, dl_test,
+        num_epochs=epochs,
+        checkpoints=checkpoints,
+        early_stopping=early_stopping,
+        max_batches=batches
+    )
     # ========================
     return save_experiment(run_name, out_dir, cfg, fit_res)
 
 
-
 def part5_exp1(
-    seed=None,
-    device=None,
+        seed=None,
+        device=None,
 ):
     # Build config from global defaults
     base = deepcopy(DEFAULT_EXPERIMENT_CONFIG)
@@ -152,20 +220,19 @@ def part5_exp1(
 
     configs = []
     # ====== YOUR CODE: ======
-    # Example: vary L (layers_per_block) with K (filters_per_layer) fixed
-    filters_per_layer = (32, 64)
-    layers_per_block = (2, 4, 8, 16)
-    for filters in filters_per_layer:
-        for layers in layers_per_block:
+    filters_per_layer = [32, 64]
+    layers_per_block = [2, 4, 8, 16]
+
+    for k in filters_per_layer:
+        for l in layers_per_block:
             cfg = dict(base)
-            cfg.update(
-                {
-                    "run_name": f"exp1_L{layers}_K{filters}",
-                    "filters_per_layer": [filters],
-                    "layers_per_block": layers,
-                    "pool_every": max(2, layers // 2),
-                }
-            )
+            cfg.update({
+                "run_name": f"exp1_L{l}_K{k}",
+                "filters_per_layer": [k],
+                "layers_per_block": l,
+                # Pool every time we finish a full layer block or max every 4 convs to avoid shrinking too fast
+                "pool_every": max(1, l // 2) if l <= 8 else 4,
+            })
             configs.append(cfg)
     # ========================
     results = []
@@ -181,9 +248,19 @@ def part5_exp2(seed=None, device=None):
 
     configs = []
     # ====== YOUR CODE: ======
-    # TODO: Define filters_per_layer and layers_per_block sweep values
-    # Then build configs similar to exp1
-    raise NotImplementedError()
+    filters_per_layer = [[32, 64, 128], [64, 128, 256]]
+    layers_per_block = [2, 4, 8]
+
+    for k in filters_per_layer:
+        for l in layers_per_block:
+            cfg = dict(base)
+            cfg.update({
+                "run_name": f"exp2_L{l}_K{k[0]}",
+                "filters_per_layer": k,
+                "layers_per_block": l,
+                "pool_every": max(1, l // 2) if l <= 8 else 4,
+            })
+            configs.append(cfg)
     # ========================
     results = []
     for cfg in tqdm(configs, desc="Experiment 2"):
@@ -198,9 +275,22 @@ def part5_exp3(seed=None, device=None):
 
     configs = []
     # ====== YOUR CODE: ======
-    # TODO: Define filters_per_layer and layers_per_block sweep values
-    # Then build configs similar to exp1
-    raise NotImplementedError()
+    # Testing effect of dropout and batchnorm (which we can pass as **kw)
+    filters_per_layer = [64]
+    layers_per_block = [2, 4]
+
+    for k in filters_per_layer:
+        for l in layers_per_block:
+            cfg = dict(base)
+            cfg.update({
+                "run_name": f"exp3_L{l}_K{k}",
+                "filters_per_layer": [k],
+                "layers_per_block": l,
+                "pool_every": max(1, l // 2),
+                "dropout": 0.3,  # Add Dropout
+                "batchnorm": True,  # Add BatchNorm
+            })
+            configs.append(cfg)
     # ========================
     results = []
     for cfg in tqdm(configs, desc="Experiment 3"):
@@ -216,9 +306,21 @@ def part5_exp4(seed=None, device=None):
 
     configs = []
     # ====== YOUR CODE: ======
-    # TODO: Define filters_per_layer and layers_per_block sweep values
-    # Then build configs similar to exp1, setting pool_every for deep runs
-    raise NotImplementedError()
+    # ResNet allows us to train very deep networks without vanishing gradients
+    filters_per_layer = [32]
+    layers_per_block = [8, 16, 32]  # Going very deep!
+
+    for k in filters_per_layer:
+        for l in layers_per_block:
+            cfg = dict(base)
+            cfg.update({
+                "run_name": f"exp4_resnet_L{l}_K{k}",
+                "filters_per_layer": [k],
+                "layers_per_block": l,
+                "pool_every": 4,  # Pool every 4 layers so we don't shrink to 0
+                "batchnorm": True,
+            })
+            configs.append(cfg)
     # ========================
     results = []
     for cfg in tqdm(configs, desc="Experiment 4"):

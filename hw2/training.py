@@ -109,11 +109,12 @@ class Trainer(abc.ABC):
             else:
                 # ====== YOUR CODE: ======
                 epochs_without_improvement += 1
-                if checkpoints is not None:
-                    self.save_checkpoint(checkpoints)
-                    if early_stopping is not None and epochs_without_improvement >= early_stopping:
-                        break
-                    # ========================
+                # ========================
+
+                # ====== YOUR CODE: ======
+            if early_stopping is not None and epochs_without_improvement >= early_stopping:
+                break
+            # ========================
 
         return FitResult(actual_num_epochs, train_loss, train_acc, test_loss, test_acc)
 
@@ -266,12 +267,22 @@ class ClassifierTrainer(Trainer):
         num_correct: int
 
         # TODO: Train the model on one batch of data.
-        #  - Forward pass
-        #  - Backward pass
-        #  - Update parameters
-        #  - Classify and calculate number of correct predictions
         # ====== YOUR CODE: ======
-        raise NotImplementedError()
+        self.optimizer.zero_grad()
+
+        # Forward pass (get raw scores)
+        out = self.model(X)
+        loss = self.loss_fn(out, y)
+
+        # Backward pass & update
+        loss.backward()
+        self.optimizer.step()
+
+        batch_loss = loss.item()
+
+        # Calculate number of correct predictions using classify_scores
+        y_pred = self.model.classify_scores(out)
+        num_correct = torch.sum(y_pred == y).item()
         # ========================
 
         return BatchResult(batch_loss, num_correct)
@@ -288,10 +299,14 @@ class ClassifierTrainer(Trainer):
 
         with torch.no_grad():
             # TODO: Evaluate the model on one batch of data.
-            #  - Forward pass
-            #  - Calculate number of correct predictions
             # ====== YOUR CODE: ======
-            raise NotImplementedError()
+            out = self.model(X)
+            loss = self.loss_fn(out, y)
+
+            batch_loss = loss.item()
+
+            y_pred = self.model.classify_scores(out)
+            num_correct = torch.sum(y_pred == y).item()
             # ========================
 
         return BatchResult(batch_loss, num_correct)
@@ -317,9 +332,7 @@ class LayerTrainer(Trainer):
         # ====== YOUR CODE: ======
         X = X.view(X.size(0), -1)
         
-        for p, dp in self.model.params():
-            if dp is not None:
-                dp.zero_()
+        self.optimizer.zero_grad()
                 
         outputs = self.model(X)
         loss = self.loss_fn(outputs, y)
@@ -331,7 +344,7 @@ class LayerTrainer(Trainer):
         num_correct = correct_tensor.sum().item()
         # ========================
 
-        return BatchResult(loss, num_correct)
+        return BatchResult(loss.item(), num_correct)
 
     def test_batch(self, batch) -> BatchResult:
         X, y = batch
@@ -346,4 +359,4 @@ class LayerTrainer(Trainer):
         num_correct = correct_tensor.sum().item()
         # ========================
 
-        return BatchResult(loss, num_correct)
+        return BatchResult(loss.item(), num_correct)
