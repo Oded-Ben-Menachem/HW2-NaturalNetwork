@@ -151,12 +151,11 @@ def part3_optim_hp():
     import torch.nn.functional
 
     loss_fn = torch.nn.CrossEntropyLoss()  # Standard loss for classification
-    lr, weight_decay, momentum = 0.01, 0.001, 0.9  # Arguments for SGD optimizer
+    
+    # שינינו את קצב הלמידה והגברנו רגולריזציה כדי למנוע אוברפיטינג
+    lr, weight_decay, momentum = 0.005, 0.01, 0.9  # Arguments for SGD optimizer
 
-    # ====== YOUR CODE: ======
-    # ========================
     return dict(lr=lr, weight_decay=weight_decay, momentum=momentum, loss_fn=loss_fn)
-
 
 part3_q1 = r"""
 Based on the plots (loss/accuracy curves and decision boundary), the qualitative assessment of the errors is as follows:
@@ -213,7 +212,7 @@ def part4_optim_hp():
     #    Loss classes in torch.nn or one of the loss functions from torch.nn.functional.
     # ====== YOUR CODE: ======
     loss_fn = torch.nn.CrossEntropyLoss()
-    lr, weight_decay, momentum = 0.1, 0.0001, 0.9
+    lr, weight_decay, momentum = 0.01, 0.0001, 0.9
     # ========================
     return dict(lr=lr, weight_decay=weight_decay, momentum=momentum, loss_fn=loss_fn)
 
