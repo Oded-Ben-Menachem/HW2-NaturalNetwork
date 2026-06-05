@@ -212,7 +212,7 @@ def part4_optim_hp():
     #    Loss classes in torch.nn or one of the loss functions from torch.nn.functional.
     # ====== YOUR CODE: ======
     loss_fn = torch.nn.CrossEntropyLoss()
-    lr, weight_decay, momentum = 0.01, 0.0001, 0.9
+    lr, weight_decay, momentum = 0.1, 0.0, 0.0
     # ========================
     return dict(lr=lr, weight_decay=weight_decay, momentum=momentum, loss_fn=loss_fn)
 
@@ -239,16 +239,36 @@ part4_q1 = r"""
 
 
 part5_q1 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+1. Increasing depth allows the network to learn more complex features, but makes it harder to train. The depth that produced the best results is l=2 , as it provides the best trade off. deep enough to extract meaningful features, but shallow enough to maintain a healthy gradient flow.
+
+2. For deep configurations L=8 and L=16, the network became untrainable, and accuracy stalled at 10\%. This is caused by the Vanishing Gradient problem. During backpropagation, the gradients exponentially decrease as they pass through many layers, leaving the earliest layers with zero updates and unable to learn.
+Two possible solutions are to add normalization layers or to use residual connections.
+"""
 
 part5_q2 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+3. Yes, L=4 became trainable and L=2 showed significant improvement compared to the baseline in experiment 1. Both networks converged faster and reached higher accuracies (around 70% for L=2).
+The reason for this improvement is the addition of Batch Normalization. Batch Normalization addresses the problem of internal covariate shift by normalizing the inputs of each layer, ensuring a stable distribution. This prevents gradients from vanishing or exploding early in the training process, allowing deeper networks like L=4 to learn effectively. Additionally, the inclusion of Dropout acted as a regularizer, preventing overfitting and improving generalization to the test set.
+
+4. The ResNet architecture (experiment 4) demonstrated a massive improvement in training very deep networks compared to both experiment 1 and 3. In experiment 1, networks deeper than L=4 completely collapsed (stuck at 10% accuracy due to vanishing gradients). In experiment 3, we managed to stabilize L=4 using BatchNorm. 
+However, ResNet allowed us to successfully train extremely deep networks (e.g., L=16 and L=32) with a steady decrease in loss and high accuracy. This is because the skip connections (shortcuts) in the residual blocks create an "express lane" for gradients during backpropagation. This allows gradients to flow directly to earlier layers without diminishing, effectively solving the vanishing gradient problem structurally and enabling the benefits of deep feature extraction without the training penalties.
+"""
 
 part5_q3 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+5. To improve the ResNet's performance, we could implement several strategies:
+- Data Augmentation: Applying transformations like random crops, flips, and rotations to the training set to prevent overfitting and improve generalization.
+- Learning Rate Scheduling: Starting with a higher learning rate and decaying it over time (e.g., using a StepLR or Cosine Annealing scheduler) can help the model converge to a better local minimum.
+- Advanced Architectures: Instead of basic residual blocks, we could use bottleneck blocks (which reduce dimensionality and computation) as seen in deeper ResNets (like ResNet-50).
+- Regularization: Increasing Dropout rates slightly or fine-tuning weight decay (L2 regularization) can further reduce overfitting on smaller datasets like CIFAR-10.
+"""
 
 part5_q4 = r"""
-Fill me. You can use Markdown and LaTeX in this string."""
+6. If we had a larger computational budget and larger datasets (like ImageNet), the fundamental concepts would remain exactly the same. The principles of convolutions, pooling, residual connections, and backpropagation scale perfectly. 
+However, the scale of the implementation would change significantly:
+- Deeper and Wider Networks: We could train models with hundreds of layers (e.g., ResNet-101 or ResNet-152) and more channels, allowing the network to learn vastly more complex and hierarchical features.
+- Larger Batch Sizes: With more VRAM (GPUs), we could use larger batch sizes, which stabilizes the gradient updates and speeds up training.
+- Longer Training: Models would be trained for hundreds of epochs over days or weeks, requiring more advanced learning rate scheduling and early stopping mechanisms.
+- While the core math and architecture stay the same, the engineering required to handle the data pipeline and distributed training across multiple GPUs becomes the primary challenge.
+"""
 
 
 # ==============

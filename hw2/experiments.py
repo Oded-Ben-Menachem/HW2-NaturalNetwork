@@ -75,18 +75,18 @@ def mlp_experiment(
     # We use ReLU activations for hidden layers and no activation ('none') for the output layer
     # since our BinaryClassifier will apply Softmax internally via predict_proba.
     dims = [width] * depth + [2]  # 'depth' hidden layers of size 'width', then output of size 2
+    #nonlins = ['LeakyReLU'] * depth + ['none']
     nonlins = ['relu'] * depth + ['none']
-
-    # Get the input dimension from the first batch of the training set
+## Get the input dimension from the first batch of the training set
     x0, _ = next(iter(dl_train))
-    in_dim = torch.numel(x0[0]) # Get the total number of elements in a single sample
-    
+    in_dim = x0.shape[1]
+
     mlp = MLP(in_dim=in_dim, dims=dims, nonlins=nonlins)
     model = BinaryClassifier(model=mlp, threshold=0.5)
 
     # 2. Train the model
     loss_fn = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)  # Adam usually converges faster here
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
     trainer = ClassifierTrainer(model, loss_fn, optimizer)
 
     fit_result = trainer.fit(
@@ -174,37 +174,79 @@ def cnn_experiment(
     #   for you automatically.
     fit_res = None
     # ====== YOUR CODE: ======
+    # ====== YOUR CODE: ======
+    
+    # Step 1: Construct the flat channels list from filters_per_layer (K) and layers_per_block (L)
+    # For example: K=[32, 64], L=2 -> channels=[32, 32, 64, 64]
+    channels = []
+    for num_filters in filters_per_layer:
+        channels.extend([num_filters] * layers_per_block)
 
-    # Generate the channels list by repeating the filters_per_layer list L times
-    channels = filters_per_layer * layers_per_block
-
+    # Step 2: Initialize the model architecture with the configured parameters
+    # The model_cls variable is dynamically set above (either ConvClassifier or ResNet)
     model = model_cls(
-        in_size=ds_train[0][0].shape,
-        out_classes=10,
+        in_size=(3, 32, 32),       # CIFAR-10 images are always 3 channels, 32x32 pixels
+        out_classes=10,            # CIFAR-10 has 10 distinct target classes
         channels=channels,
         pool_every=pool_every,
         hidden_dims=hidden_dims,
         conv_params=conv_params,
         pooling_params=pooling_params,
-        **kw
-    ).to(device)
+    )
+    
+    # Move the entire model parameters to the designated hardware accelerator (GPU or CPU)
+    model = model.to(device)
 
+    # Step 3: Create PyTorch DataLoaders to handle batching and shuffling
+    # Shuffling the training set ensures the network doesn't memorize the order of samples
+    from torch.utils.data import DataLoader
+    
+    train_loader = DataLoader(
+        dataset=ds_train,
+        batch_size=bs_train,
+        shuffle=True,
+    )
+    
+    test_loader = DataLoader(
+        dataset=ds_test,
+        batch_size=bs_test,
+        shuffle=False,  # No need to shuffle the validation/test set
+    )
+
+    # Step 4: Define the loss function and optimization algorithm
+    # CrossEntropyLoss is the industry standard for multi-class classification
     loss_fn = torch.nn.CrossEntropyLoss()
-    # Adam usually converges better and faster for these deep CNNs
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=reg)
+    
+    # Adam optimizer is a solid choice here, applying L2 regularization via weight_decay
+    optimizer = torch.optim.Adam(
+        params=model.parameters(),
+        lr=lr,
+        weight_decay=reg,
+    )
 
-    trainer = ClassifierTrainer(model, loss_fn, optimizer, device)
+    # Step 5: Initialize the Trainer class and execute the training loop
+    from hw2.training import ClassifierTrainer  
+    
+    trainer = ClassifierTrainer(
+        model=model,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        device=device,
+    )
+    
 
-    dl_train = DataLoader(ds_train, bs_train, shuffle=True)
-    dl_test = DataLoader(ds_test, bs_test, shuffle=False)
-
+    # Run the actual training. The fit method handles early stopping and max batches tracking,
+    # and returns a FitResult object containing losses and accuracies per epoch.
     fit_res = trainer.fit(
-        dl_train, dl_test,
+        dl_train=train_loader,
+        dl_test=test_loader,
         num_epochs=epochs,
         checkpoints=checkpoints,
         early_stopping=early_stopping,
-        max_batches=batches
+        max_batches=batches,
     )
+    
+    # ========================
     # ========================
     return save_experiment(run_name, out_dir, cfg, fit_res)
 
@@ -248,18 +290,27 @@ def part5_exp2(seed=None, device=None):
 
     configs = []
     # ====== YOUR CODE: ======
-    filters_per_layer = [[32, 64, 128], [64, 128, 256]]
-    layers_per_block = [2, 4, 8]
-
-    for k in filters_per_layer:
-        for l in layers_per_block:
-            cfg = dict(base)
-            cfg.update({
-                "run_name": f"exp2_L{l}_K{k[0]}",
-                "filters_per_layer": k,
-                "layers_per_block": l,
-                "pool_every": max(1, l // 2) if l <= 8 else 4,
-            })
+    L_values = [2, 4, 8]
+    K_values = [[32], [64], [128]]
+    
+    for L in L_values:
+        for K in K_values:
+            # Create a specific configuration for this run based on the base config
+            cfg = base.copy()
+            
+            # Update the parameters for the current run
+            cfg["run_name"] = f"exp2_L{L}_K{K[0]}"
+            cfg["filters_per_layer"] = K
+            cfg["layers_per_block"] = L
+            cfg["model_type"] = "cnn"
+            
+            # Setting hyperparameters to ensure good convergence and avoid zero-width maps
+            cfg["epochs"] = 20          # 20 epochs is a good balance for training time vs results
+            cfg["early_stopping"] = 3   # Stop if validation loss doesn't improve for 3 epochs
+            cfg["pool_every"] = 4       # Large enough to prevent spatial dimensions from reaching 0
+            cfg["bs_train"] = 128
+            
+            # Append this configuration dict to the configs list
             configs.append(cfg)
     # ========================
     results = []
@@ -306,24 +357,60 @@ def part5_exp4(seed=None, device=None):
 
     configs = []
     # ====== YOUR CODE: ======
-    # ResNet allows us to train very deep networks without vanishing gradients
-    filters_per_layer = [32]
-    layers_per_block = [8, 16, 32]  # Going very deep!
-
-    for k in filters_per_layer:
-        for l in layers_per_block:
-            cfg = dict(base)
-            cfg.update({
-                "run_name": f"exp4_resnet_L{l}_K{k}",
-                "filters_per_layer": [k],
-                "layers_per_block": l,
-                "pool_every": 4,  # Pool every 4 layers so we don't shrink to 0
-                "batchnorm": True,
-            })
-            configs.append(cfg)
+    # --------------------------------------------------------
+    # Group 1: Fixed K=[32], varying L
+    # --------------------------------------------------------
+    K1 = [32]
+    L_values1 = [8, 16, 32]
+    
+    for L in L_values1:
+        cfg = base.copy()
+        
+        cfg["run_name"] = f"exp4_L{L}_K32"
+        cfg["filters_per_layer"] = K1
+        cfg["layers_per_block"] = L
+        
+        # Hyperparameters
+        cfg["epochs"] = 20
+        cfg["early_stopping"] = 3
+        cfg["bs_train"] = 128
+        
+        # Dynamic pool_every to avoid zero-width maps on extremely deep networks
+        # Total layers = len(K) * L. We want ~4 pools across the entire network.
+        total_layers = len(K1) * L
+        cfg["pool_every"] = max(2, total_layers // 4)
+        
+        configs.append(cfg)
+        
+    # --------------------------------------------------------
+    # Group 2: Fixed expanding K=[64, 128, 256], varying L
+    # --------------------------------------------------------
+    K2 = [64, 128, 256]
+    L_values2 = [2, 4, 8]
+    
+    for L in L_values2:
+        cfg = base.copy()
+        
+        cfg["run_name"] = f"exp4_L{L}_K64-128-256"
+        cfg["filters_per_layer"] = K2
+        cfg["layers_per_block"] = L
+        
+        # Hyperparameters
+        cfg["epochs"] = 20
+        cfg["early_stopping"] = 3
+        cfg["bs_train"] = 128
+        
+        # Dynamic pool_every to avoid zero-width maps
+        total_layers = len(K2) * L
+        cfg["pool_every"] = max(2, total_layers // 4)
+        
+        configs.append(cfg)
     # ========================
+    # במקום השורות עם tqdm, נשתמש בלולאת for רגילה
     results = []
-    for cfg in tqdm(configs, desc="Experiment 4"):
+    # זה החלק שמשנה את ה-loop כדי למנוע deadlock
+    for cfg in configs:
+        print(f"Running {cfg['run_name']}...")
         results.append(cnn_experiment(**cfg))
     return results
 

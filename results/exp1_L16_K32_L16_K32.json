@@ -1,0 +1,65 @@
+{
+  "config": {
+    "run_name": "exp1_L16_K32",
+    "out_dir": "./results",
+    "seed": 42,
+    "device": "cuda",
+    "bs_train": 128,
+    "bs_test": 32,
+    "batches": 100,
+    "epochs": 100,
+    "early_stopping": 3,
+    "checkpoints": null,
+    "lr": 0.001,
+    "reg": 0.001,
+    "filters_per_layer": [
+      32
+    ],
+    "layers_per_block": 16,
+    "pool_every": 4,
+    "hidden_dims": [
+      1024
+    ],
+    "model_type": "cnn",
+    "conv_params": {
+      "kernel_size": 3,
+      "padding": 1,
+      "stride": 1
+    },
+    "pooling_params": {
+      "kernel_size": 2
+    },
+    "kw": {}
+  },
+  "results": {
+    "num_epochs": 5,
+    "train_loss": [
+      2.304496386051178,
+      2.303717379570007,
+      2.303047571182251,
+      2.3029588937759398,
+      2.3029665613174437
+    ],
+    "train_acc": [
+      10.21875,
+      10.09375,
+      9.9765625,
+      10.140625,
+      9.6171875
+    ],
+    "test_loss": [
+      2.302628552913666,
+      2.302638342380524,
+      2.303218619823456,
+      2.3026898550987243,
+      2.3030924701690676
+    ],
+    "test_acc": [
+      9.96875,
+      10.5,
+      9.84375,
+      10.46875,
+      9.84375
+    ]
+  }
+}

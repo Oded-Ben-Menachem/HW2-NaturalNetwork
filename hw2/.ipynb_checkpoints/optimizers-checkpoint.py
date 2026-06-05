@@ -68,12 +68,10 @@ class VanillaSGD(Optimizer):
             if dp is None:
                 continue
 
-            # TODO: Implement the optimizer step.
-            #  Update the gradient according to regularization and then
-            #  update the parameters tensor.
             # ====== YOUR CODE: ======
-            dp += self.reg*p
-            p -= self.learn_rate*dp
+            # Isolate the gradient calculation (do not modify dp in-place)
+            grad = dp + self.reg * p
+            p -= self.learn_rate * grad
             # ========================
 
             
@@ -156,5 +154,5 @@ class RMSProp(Optimizer):
             self.r_dict[p] = self.decay * r + (1.0 - self.decay) * (grad ** 2)
             
             # 4. Update parameter weights from formula: theta = theta - (lr / (sqrt(r) + eps)) * grad
-            p -= (self.learn_rate / (torch.sqrt(self.r_dict[p]) + self.eps)) * grad
+            p -= (self.learn_rate / torch.sqrt(self.r_dict[p] + self.eps)) * grad
             # ========================
